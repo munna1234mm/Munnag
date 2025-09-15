@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="monetag" content="f32742f6da61c6f975f9358d06b63473">
+    <link crossorigin="" href="https://fonts.gstatic.com/" rel="preconnect"/>
+    <link as="style" href="https://fonts.googleapis.com/css2?display=swap&amp;family=Space+Mono:wght@400;700&amp;family=Space+Grotesk%3Awght%40400%3B500%3B700" onload="this.rel='stylesheet'" rel="stylesheet"/>
+    <title>Interactive Web Terminal</title>
+    <link href="data:image/x-icon;base64," rel="icon" type="image/x-icon"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <style type="text/tailwindcss">
+      :root {
+        --primary-color: #38e07b;
+      }
+      body {
+        font-family: 'Space Mono', monospace;
+      }
+      /* Custom scrollbar for a better terminal look */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #161B22;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #49515a;
+      }
+    </style>
+</head>
+<body class="bg-[#0D1117] text-[#C9D1D9]">
+<div class="flex h-screen">
+    <!-- Sidebar with command list -->
+    <aside class="w-64 bg-[#161B22] p-4 flex-col hidden sm:flex">
+        <h2 class="text-lg font-bold text-white mb-4">Commands</h2>
+        <ul class="space-y-2 text-sm">
+            <li><a class="hover:text-[var(--primary-color)]" href="#">ls - list directory contents</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">cd [dir] - change directory</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">mkdir [dir] - make directory</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">touch [file] - create file</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">cat [file] - view file contents</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">whoami - display user</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">date - show current date</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">help - show all commands</a></li>
+            <li><a class="hover:text-[var(--primary-color)]" href="#">clear - clear the terminal</a></li>
+        </ul>
+        <div class="mt-auto">
+            <p class="text-xs text-gray-400">An interactive web terminal.</p>
+        </div>
+    </aside>
+
+    <!-- Main terminal window -->
+    <main class="flex-1 flex flex-col h-screen p-4" onclick="document.getElementById('command-input').focus()">
+        <div class="flex-grow overflow-y-auto pr-2" id="output">
+            <!-- Initial welcome message -->
+            <p><span class="text-[var(--primary-color)]">system@web-terminal</span><span class="text-white">:</span><span class="text-[#79c0ff]">~</span>$ Welcome to the Web Terminal.</p>
+            <p>Type 'help' for a list of commands.</p>
+            <p class="h-4"></p>
+        </div>
+        <div class="flex items-center">
+            <span class="text-[var(--primary-color)]">user@web-terminal</span><span class="text-white">:</span><span class="text-[#79c0ff]" id="prompt-path">~</span><span class="mr-2 text-white">$</span>
+            <input autofocus class="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-white placeholder:text-gray-500" id="command-input" placeholder="Enter command here..." type="text"/>
+        </div>
+    </main>
+</div>
+
+<script>
+    const commandInput = document.getElementById('command-input');
+    const output = document.getElementById('output');
+    const promptPath = document.getElementById('prompt-path');
+
+    // --- File System Simulation ---
+    let fileSystem = {
+        '~': {
+            type: 'directory',
+            children: {
+                'README.md': {
+                    type: 'file',
+                    content: 'Hello! This is a simple web-based terminal.\n\nTry out the commands listed in the sidebar.\nYou can create files and directories, and navigate the file system.\n'
+                },
+                'projects': {
+                    type: 'directory',
+                    children: {
+                        'portfolio.js': { type: 'file', content: 'console.log("Welcome to my portfolio!");' },
+                        'game.css': { type: 'file', content: '/* Game styles */' }
+                    }
+                },
+                'about.txt': {
+                    type: 'file',
+                    content: 'I am a web terminal created to simulate a command-line interface in your browser.'
+                }
+            }
+        }
+    };
+
+    let currentPath = ['~'];
+    let commandHistory = [];
+    let historyIndex = -1;
+
+    // --- Helper Functions ---
+
+    // Get the directory object from a path array
+    function getDirectory(path) {
+        let current = fileSystem['~']; // Always start from home
+        let workingPath = [...path];
+        workingPath.shift(); // Remove '~' from the path to traverse
+
+        for (const dirName of workingPath) {
+            if (current && current.type === 'directory' && current.children[dirName]) {
+                current = current.children[dirName];
+            } else {
+                return null; // Path is invalid
+            }
+        }
+        return current;
+    }
+
+    // Update the path display in the prompt
+    function updatePrompt() {
+        promptPath.textContent = currentPath.join('/');
+    }
+
+    // --- Command Execution Logic ---
+
+    function executeCommand(command) {
+        const [cmd, ...args] = command.split(/\s+/);
+        const currentDir = getDirectory(currentPath);
+
+        switch (cmd) {
+            case 'help':
+                output.innerHTML += `
+                    <p class="mb-2">Available commands:</p>
+                    <ul class="list-inside space-y-1 text-sm">
+                        <li><span class="font-bold w-24 inline-block">ls</span> - list directory contents</li>
+                        <li><span class="font-bold w-24 inline-block">cd [dir]</span> - change directory</li>
+                        <li><span class="font-bold w-24 inline-block">mkdir [dir]</span> - make directory</li>
+                        <li><span class="font-bold w-24 inline-block">touch [file]</span> - create file</li>
+                        <li><span class="font-bold w-24 inline-block">cat [file]</span> - view file contents</li>
+                        <li><span class="font-bold w-24 inline-block">whoami</span> - display the current user</li>
+                        <li><span class="font-bold w-24 inline-block">date</span> - display the current date</li>
+                        <li><span class="font-bold w-24 inline-block">help</span> - show this help message</li>
+                        <li><span class="font-bold w-24 inline-block">clear</span> - clear the terminal</li>
+                    </ul>`;
+                break;
+            case 'ls':
+                if (currentDir && currentDir.type === 'directory') {
+                    const contents = Object.keys(currentDir.children);
+                    if (contents.length === 0) {
+                       break; // No output if directory is empty
+                    }
+                    let lsOutput = contents.map(item => {
+                        const itemType = currentDir.children[item].type;
+                        return itemType === 'directory' ? `<span class="text-[#79c0ff]">${item}</span>` : `<span>${item}</span>`;
+                    }).join('&nbsp;&nbsp;');
+                    output.innerHTML += `<p>${lsOutput}</p>`;
+                }
+                break;
+            case 'cat':
+                if (args.length === 0) {
+                    output.innerHTML += `<p>cat: missing operand</p>`;
+                    break;
+                }
+                const catFileName = args[0];
+                if (currentDir.children[catFileName] && currentDir.children[catFileName].type === 'file') {
+                    const content = currentDir.children[catFileName].content.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, '<br>');
+                    output.innerHTML += `<p class="whitespace-pre-wrap">${content}</p>`;
+                } else {
+                    output.innerHTML += `<p>cat: ${catFileName}: No such file or directory</p>`;
+                }
+                break;
+            case 'cd':
+                if (args.length === 0 || args[0] === '~') {
+                    currentPath = ['~'];
+                } else if (args[0] === '..') {
+                    if (currentPath.length > 1) {
+                        currentPath.pop();
+                    }
+                } else {
+                    const dirName = args[0];
+                    if (currentDir.children[dirName] && currentDir.children[dirName].type === 'directory') {
+                        currentPath.push(dirName);
+                    } else {
+                        output.innerHTML += `<p>cd: ${dirName}: No such directory</p>`;
+                    }
+                }
+                updatePrompt();
+                break;
+            case 'mkdir':
+                if (args.length === 0) {
+                     output.innerHTML += `<p>mkdir: missing operand</p>`;
+                     break;
+                }
+                const newDirName = args[0];
+                if (currentDir.children[newDirName]) {
+                    output.innerHTML += `<p>mkdir: cannot create directory ‘${newDirName}’: File exists</p>`;
+                } else {
+                    currentDir.children[newDirName] = { type: 'directory', children: {} };
+                }
+                break;
+            case 'touch':
+                 if (args.length === 0) {
+                     output.innerHTML += `<p>touch: missing operand</p>`;
+                     break;
+                }
+                const newFileName = args[0];
+                if (!currentDir.children[newFileName]) {
+                    currentDir.children[newFileName] = { type: 'file', content: '' };
+                }
+                break;
+            case 'clear':
+                output.innerHTML = '';
+                return; // Return to avoid adding the empty line
+            case 'whoami':
+                output.innerHTML += '<p>user</p>';
+                break;
+            case 'date':
+                output.innerHTML += `<p>${new Date().toString()}</p>`;
+                break;
+            default:
+                output.innerHTML += `<p>${cmd}: command not found</p>`;
+        }
+        output.innerHTML += '<p class="h-4"></p>';
+    }
+
+
+    // --- Event Listeners ---
+    commandInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            const command = commandInput.value.trim();
+            
+            // Display the entered command
+            const pathForOutput = promptPath.textContent;
+            output.innerHTML += `<div class="flex"><span class="text-[var(--primary-color)]">user@web-terminal</span><span class="text-white">:</span><span class="text-[#79c0ff]">${pathForOutput}</span><span class="mr-2 text-white">$</span><p>${command}</p></div>`;
+
+            if (command !== '') {
+                commandHistory.push(command);
+                historyIndex = commandHistory.length;
+                executeCommand(command);
+            } else {
+                 output.innerHTML += '<p class="h-4"></p>';
+            }
+            
+            commandInput.value = '';
+            // Scroll to the bottom of the output
+            output.scrollTop = output.scrollHeight;
+            event.preventDefault();
+        } else if (event.key === 'ArrowUp') {
+            if (historyIndex > 0) {
+                historyIndex--;
+                commandInput.value = commandHistory[historyIndex];
+            }
+            event.preventDefault();
+        } else if (event.key === 'ArrowDown') {
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                commandInput.value = commandHistory[historyIndex];
+            } else if (historyIndex === commandHistory.length - 1) {
+                 historyIndex++;
+                 commandInput.value = '';
+            }
+            event.preventDefault();
+        }
+    });
+
+    // --- Initial Setup ---
+    updatePrompt();
+    commandInput.focus();
+
+</script>
+</body>
+</html>
+
